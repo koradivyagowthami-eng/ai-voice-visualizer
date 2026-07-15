@@ -1,0 +1,26 @@
+{% extends "portal/base.html" %}
+
+{% block content %}
+<section class="detail-layout">
+    <div>
+        {% if item.image %}
+            <img class="detail-image" src="{{ item.image.url }}" alt="{{ item.name }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';">
+            <div class="detail-placeholder hidden-placeholder">No Image Available</div>
+        {% else %}
+            <div class="detail-placeholder">No Image Available</div>
+        {% endif %}
+    </div>
+    <div class="detail-content">
+        <span class="tag {{ item.item_type }}">{{ item.get_item_type_display }}</span>
+        <h1>{{ item.name }}</h1>
+        <p><strong>Location:</strong> {{ item.location }}</p>
+        <p><strong>Status:</strong> {{ item.get_status_display }}</p>
+
+        {% if item.status == "open" %}
+            <a class="primary-button" href="{% url 'claim_item' item.id %}">Claim This Item</a>
+        {% else %}
+            <p class="claimed-note">This item has already been marked as claimed.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

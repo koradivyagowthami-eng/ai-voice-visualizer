@@ -1,31 +1,216 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, FileAudio, Mic, MicOff, Pause, Play, Square, Upload, Volume2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { Download, FileVideo, Mic, Pause, Play, Square, Trash2, Upload, Volume2, X, Settings, Image as ImageIcon, Grid, AudioLines, Maximize, Minimize } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { OrbitControls, Environment, Float, Sphere, MeshDistortMaterial } from "@react-three/drei";
+import * as THREE from "three";
+import localforage from "localforage";
 import "./App.css";
 
-type Particle = { x: number; y: number; size: number; speed: number; angle: number; phase: number; color: string };
+// --- 3D Visualizer Component ---
+function Visualizer3D({ 
+  analyserRef, 
+  isSpeakingRef,
+  transcript,
+  voiceText,
+  orbColor,
+  coreColor,
+  sceneType
+}: { 
+  analyserRef: React.MutableRefObject<AnalyserNode | null>, 
+  isSpeakingRef: React.MutableRefObject<boolean>,
+  transcript: string,
+  voiceText?: string,
+  orbColor: string,
+  coreColor: string,
+  sceneType: string
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const materialRef = useRef<any>(null);
+  const [bgTexture, setBgTexture] = useState<THREE.Texture | null>(null);
+  const [debouncedPhrase, setDebouncedPhrase] = useState("");
+  
+  const frequencies = useMemo(() => new Uint8Array(128), []);
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-const lerp = (from: number, to: number, amount: number) => from + (to - from) * amount;
+  const words = transcript.replace(/▍/g, '').trim().split(/\s+/);
+  const speechText = words.length > 0 && words[0] !== "" ? words.slice(-10).join(' ') : "";
+  const latestPhrase = voiceText || speechText || "epic beautiful anime scenery, gorgeous sky, studio ghibli masterpiece";
 
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (latestPhrase.length > 5 && latestPhrase !== debouncedPhrase) {
+        setDebouncedPhrase(latestPhrase);
+      }
+    }, 1500); 
+    return () => clearTimeout(handler);
+  }, [latestPhrase, debouncedPhrase]);
+
+  useEffect(() => {
+    if (debouncedPhrase) {
+      const prompt = `${debouncedPhrase}, stunning anime style, studio ghibli, masterpiece, highly detailed 2d anime art`;
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&nologo=true`;
+      
+      const loader = new THREE.TextureLoader();
+      loader.setCrossOrigin('anonymous');
+      loader.load(
+        url, 
+        (texture) => {
+          texture.colorSpace = THREE.SRGBColorSpace;
+          setBgTexture(texture);
+        },
+        undefined,
+        (err) => console.error("Texture load error:", err)
+      );
+    }
+  }, [debouncedPhrase]);
+
+  useFrame((state) => {
+    if (!meshRef.current || !materialRef.current) return;
+    
+    let targetLevel = 0;
+    if (analyserRef.current) {
+      analyserRef.current.getByteFrequencyData(frequencies);
+      const average = frequencies.reduce((sum, value) => sum + value, 0) / frequencies.length;
+      targetLevel = average / 100;
+    }
+    
+    if (isSpeakingRef.current) {
+      const time = state.clock.getElapsedTime();
+      const syllable = Math.pow(Math.max(0, Math.sin(time * 10) * 0.7 + Math.sin(time * 18) * 0.35), 1.7);
+      targetLevel = Math.max(targetLevel, 0.3 + syllable * 0.5);
+    }
+
+    const scale = THREE.MathUtils.lerp(meshRef.current.scale.x, 1.2 + targetLevel * 1.5, 0.1);
+    meshRef.current.scale.set(scale, scale, scale);
+    
+    materialRef.current.distort = THREE.MathUtils.lerp(materialRef.current.distort, 0.2 + targetLevel * 1.2, 0.1);
+    materialRef.current.speed = THREE.MathUtils.lerp(materialRef.current.speed, 1.5 + targetLevel * 8, 0.1);
+  });
+
+  return (
+    <>
+      {sceneType === 'orb' && (
+        <Float speed={2} rotationIntensity={1.5} floatIntensity={2}>
+          <Sphere ref={meshRef} args={[1, 128, 128]} scale={1}>
+            <MeshDistortMaterial 
+              ref={materialRef}
+              color={orbColor} 
+              emissive={orbColor}
+              emissiveIntensity={0.6}
+              roughness={0.2}
+              metalness={0.9}
+              distort={0.2}
+              speed={1.5}
+              wireframe={true}
+            />
+          </Sphere>
+          <Sphere args={[0.95, 64, 64]}>
+             <meshStandardMaterial 
+                color="#0f172a" 
+                emissive={coreColor} 
+                emissiveIntensity={0.8} 
+                roughness={0.3} 
+                metalness={0.8}
+             />
+          </Sphere>
+        </Float>
+      )}
+
+      {sceneType === 'cube' && (
+        <Float speed={2} rotationIntensity={3} floatIntensity={2}>
+           <mesh ref={meshRef as any}>
+              <boxGeometry args={[1.5, 1.5, 1.5, 32, 32, 32]} />
+              <MeshDistortMaterial 
+                ref={materialRef}
+                color={orbColor} 
+                emissive={coreColor}
+                emissiveIntensity={0.6}
+                roughness={0.1}
+                metalness={0.9}
+                distort={0.3}
+                speed={2}
+                wireframe={true}
+              />
+           </mesh>
+        </Float>
+      )}
+
+      <mesh position={[0, 0, -10]} scale={[24, 13.5, 1]}>
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial 
+           map={bgTexture} 
+           color={bgTexture ? "#999999" : "#020617"} 
+           transparent 
+           opacity={bgTexture ? 0.8 : 1}
+        />
+      </mesh>
+    </>
+  );
+}
+
+// --- Main App ---
 function App() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  
   const [isListening, setIsListening] = useState(false);
   const [permissionError, setPermissionError] = useState("");
   const [isRecording, setIsRecording] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [audioUrl, setAudioUrl] = useState("");
-  const [audioName, setAudioName] = useState("");
+  
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaName, setMediaName] = useState("");
   const [transcript, setTranscript] = useState("");
   const [recognitionActive, setRecognitionActive] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceText, setVoiceText] = useState("");
+  
+  // Customization State
+  const [orbColor, setOrbColor] = useState("#06b6d4"); // Cyan
+  const [coreColor, setCoreColor] = useState("#8b5cf6"); // Purple
+  const [sceneType, setSceneType] = useState("orb");
+  const [showSettings, setShowSettings] = useState(false);
+  const [isZenMode, setIsZenMode] = useState(false);
+
+  // Gallery State
+  const [gallery, setGallery] = useState<{ id: string, name: string, date: number, blob: Blob }[]>([]);
+  const [showGallery, setShowGallery] = useState(false);
+
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recognitionRef = useRef<any>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const isSpeakingRef = useRef(false);
+  const finalTranscriptRef = useRef("");
+
+  // Initialize DB and fetch gallery
+  useEffect(() => {
+    localforage.config({ name: 'VoiceVisualizer', storeName: 'videos' });
+    fetchGallery();
+  }, []);
+
+  const fetchGallery = async () => {
+    try {
+      const keys = await localforage.keys();
+      const items = await Promise.all(keys.map(async (key) => {
+        const data = await localforage.getItem<any>(key);
+        return { id: key, ...data };
+      }));
+      setGallery(items.sort((a, b) => b.date - a.date));
+    } catch (e) {
+      console.error("Failed to fetch gallery:", e);
+    }
+  };
+
+  const deleteFromGallery = async (id: string) => {
+    await localforage.removeItem(id);
+    fetchGallery();
+  };
+
+  const loadFromGallery = (item: any) => {
+    if (mediaUrl) URL.revokeObjectURL(mediaUrl);
+    setMediaUrl(URL.createObjectURL(item.blob));
+    setMediaName(item.name);
+    setShowGallery(false);
+  };
 
   const stopListening = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -48,7 +233,7 @@ function App() {
       if (!AudioContextClass) throw new Error("Web Audio is not supported in this browser.");
       const context = new AudioContextClass();
       const analyser = context.createAnalyser();
-      analyser.fftSize = 512;
+      analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.82;
       const source = context.createMediaStreamSource(stream);
       source.connect(analyser);
@@ -69,30 +254,70 @@ function App() {
     const stream = streamRef.current;
     if (!stream) return;
     setTranscript("");
+    finalTranscriptRef.current = "";
+    
+    // Capture 3D Canvas Video Stream
+    let recordStream = stream;
+    let isVideo = false;
+    try {
+      const canvas = document.querySelector('canvas');
+      if (canvas) {
+        // @ts-ignore
+        const canvasStream = canvas.captureStream(30);
+        const videoTracks = canvasStream.getVideoTracks();
+        if (videoTracks.length > 0) {
+          recordStream = new MediaStream([...videoTracks, ...stream.getAudioTracks()]);
+          isVideo = true;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not capture canvas stream, falling back to audio only.", e);
+    }
+
     const chunks: BlobPart[] = [];
-    const recorder = new MediaRecorder(stream);
+    const options = isVideo ? { mimeType: 'video/webm' } : undefined;
+    
+    let recorder: MediaRecorder;
+    try {
+       recorder = new MediaRecorder(recordStream, options);
+    } catch (e) {
+       recorder = new MediaRecorder(recordStream);
+    }
+
     recorder.ondataavailable = (event) => event.data.size && chunks.push(event.data);
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+    recorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: isVideo ? "video/webm" : (recorder.mimeType || "audio/webm") });
       if (blob.size) {
-        if (audioUrl) URL.revokeObjectURL(audioUrl);
-        setAudioUrl(URL.createObjectURL(blob));
-        setAudioName(`voice-note-${new Date().toISOString().slice(0, 10)}.webm`);
+        if (mediaUrl) URL.revokeObjectURL(mediaUrl);
+        const name = `visualizer-${new Date().toISOString().slice(0, 10)}.webm`;
+        setMediaUrl(URL.createObjectURL(blob));
+        setMediaName(name);
+        
+        try {
+           await localforage.setItem(Date.now().toString(), { name, date: Date.now(), blob });
+           fetchGallery();
+        } catch (e) {
+           console.error("Failed to save to gallery:", e);
+        }
       }
     };
     recorder.start(); recorderRef.current = recorder; setIsRecording(true);
+    
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
       recognition.continuous = true; recognition.interimResults = true; recognition.lang = navigator.language || "en-US";
       recognition.onresult = (event: any) => {
-        let finalText = ""; let interimText = "";
+        let interimText = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const text = event.results[i][0].transcript;
-          event.results[i].isFinal ? (finalText += text + " ") : (interimText += text);
+          if (event.results[i].isFinal) {
+            finalTranscriptRef.current += text + " ";
+          } else {
+            interimText += text;
+          }
         }
-        if (finalText) setTranscript((current) => `${current}${finalText}`);
-        if (interimText) setTranscript((current) => current.replace(/\s*▍.*$/, "") + `${interimText} ▍`);
+        setTranscript(finalTranscriptRef.current + (interimText ? interimText + " ▍" : ""));
       };
       recognition.onerror = () => setRecognitionActive(false);
       recognition.onend = () => setRecognitionActive(false);
@@ -103,20 +328,57 @@ function App() {
   const stopRecording = () => {
     recorderRef.current?.state === "recording" && recorderRef.current.stop();
     recognitionRef.current?.stop?.();
-    setTranscript((text) => text.replace(/\s*▍.*$/, "").trim());
+    setTranscript(finalTranscriptRef.current.trim());
     setIsRecording(false); setRecognitionActive(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file && (file.type.startsWith("audio/") || file.type.startsWith("video/"))) {
+       if (mediaUrl) URL.revokeObjectURL(mediaUrl);
+       setMediaUrl(URL.createObjectURL(file)); setMediaName(file.name); setTranscript("");
+    }
   };
 
   const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    setAudioUrl(URL.createObjectURL(file)); setAudioName(file.name); setTranscript("");
+    if (mediaUrl) URL.revokeObjectURL(mediaUrl);
+    setMediaUrl(URL.createObjectURL(file)); setMediaName(file.name); setTranscript("");
+  };
+
+  const onAudioPlayerPlay = (e: React.SyntheticEvent<HTMLAudioElement>) => {
+    if (!audioContextRef.current) {
+      const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      audioContextRef.current = new AudioContextClass();
+    }
+    const context = audioContextRef.current;
+    
+    if (!(e.target as any).hasConnectedSource) {
+       const analyser = context.createAnalyser();
+       analyser.fftSize = 256;
+       analyser.smoothingTimeConstant = 0.82;
+       
+       const source = context.createMediaElementSource(e.target as HTMLMediaElement);
+       source.connect(analyser);
+       analyser.connect(context.destination);
+       
+       analyserRef.current = analyser;
+       (e.target as any).hasConnectedSource = true;
+    }
   };
 
   const downloadTranscript = () => {
-    const blob = new Blob([transcript || "No transcript was captured."], { type: "text/plain" });
-    const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "voice-transcript.txt"; link.click(); URL.revokeObjectURL(link.href);
+    const textToSave = finalTranscriptRef.current.trim() || transcript.replace(/\s*▍.*$/, "").trim() || "No transcript was captured.";
+    const blob = new Blob([textToSave], { type: "text/plain" });
+    const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `echovision-transcript-${Date.now()}.txt`; link.click(); URL.revokeObjectURL(link.href);
+  };
+
+  const removeUploadedMedia = () => {
+    if (mediaUrl) URL.revokeObjectURL(mediaUrl);
+    setMediaUrl(""); setMediaName(""); 
   };
 
   const speakText = (text: string) => {
@@ -130,6 +392,26 @@ function App() {
     window.speechSynthesis.speak(utterance); setIsSpeaking(true);
   };
 
+  const toggleZenMode = async () => {
+    if (!isZenMode) {
+        try { await document.documentElement.requestFullscreen(); } catch (e) { console.warn(e); }
+        setIsZenMode(true);
+        setShowGallery(false);
+        setShowSettings(false);
+    } else {
+        try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (e) { console.warn(e); }
+        setIsZenMode(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+        if (!document.fullscreenElement) setIsZenMode(false);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
   useEffect(() => {
     if (!voiceText.trim()) return;
     const delay = window.setTimeout(() => speakText(voiceText), 900);
@@ -141,7 +423,7 @@ function App() {
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       if (event.code === "Space") { event.preventDefault(); isListening ? stopListening() : startListening(); }
       if (event.code === "Escape" && isListening) stopListening();
     };
@@ -149,128 +431,364 @@ function App() {
     return () => window.removeEventListener("keydown", handleShortcut);
   }, [isListening, stopListening]);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    const particles: Particle[] = Array.from({ length: 130 }, (_, index) => ({
-      x: Math.random(), y: Math.random(), size: Math.random() * 1.8 + 0.35,
-      speed: Math.random() * 0.14 + 0.03, angle: Math.random() * Math.PI * 2,
-      phase: Math.random() * Math.PI * 2, color: index % 8 === 0 ? "#aeeaff" : index % 3 === 0 ? "#318dff" : "#3cecff",
-    }));
-    let frame = 0;
-    let animationId = 0;
-    let smoothLevel = 0;
-    let size = { width: 0, height: 0, dpr: 1 };
+  const isVideoMedia = mediaName.endsWith('.webm') || mediaName.endsWith('.mp4');
 
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect();
-      size = { width: rect.width, height: rect.height, dpr: Math.min(window.devicePixelRatio || 1, 2) };
-      canvas.width = size.width * size.dpr;
-      canvas.height = size.height * size.dpr;
-      context.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
-    };
-    resize();
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
-    const frequencies = new Uint8Array(256);
-
-    const circle = (x: number, y: number, radius: number, color: string, width: number, alpha = 1) => {
-      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2);
-      context.strokeStyle = color; context.globalAlpha = alpha; context.lineWidth = width; context.stroke();
-    };
-    const draw = (time: number) => {
-      const { width, height } = size;
-      const cx = width / 2; const cy = height / 2;
-      const scale = Math.min(width, height);
-      frame += 0.012;
-      let targetLevel = 0.045 + Math.sin(time * 0.0012) * 0.009;
-      if (analyserRef.current) {
-        analyserRef.current.getByteFrequencyData(frequencies);
-        const average = frequencies.reduce((sum, value) => sum + value, 0) / frequencies.length;
-        targetLevel = clamp(average / 105, 0, 1);
-      }
-      if (isSpeakingRef.current) {
-        // Speech synthesis cannot be read through the microphone analyser, so create a gentle phoneme-like signal.
-        const syllable = Math.pow(Math.max(0, Math.sin(time * .0105) * .7 + Math.sin(time * .018) * .35), 1.7);
-        targetLevel = Math.max(targetLevel, .16 + syllable * .46);
-        for (let i = 0; i < frequencies.length; i++) {
-          const harmonic = Math.max(0, Math.sin(i * .15 + time * .012) * .55 + Math.sin(i * .041 - time * .008) * .3);
-          frequencies[i] = Math.max(frequencies[i], Math.round((32 + harmonic * 155) * (.55 + syllable * .45)));
-        }
-      }
-      smoothLevel = lerp(smoothLevel, targetLevel, analyserRef.current ? 0.1 : 0.035);
-      context.clearRect(0, 0, width, height);
-
-      const wash = context.createRadialGradient(cx, cy, 0, cx, cy, scale * 0.63);
-      wash.addColorStop(0, `rgba(31, 182, 255, ${0.07 + smoothLevel * 0.13})`);
-      wash.addColorStop(0.42, "rgba(17, 76, 188, 0.12)"); wash.addColorStop(1, "rgba(2, 9, 28, 0)");
-      context.fillStyle = wash; context.fillRect(0, 0, width, height);
-
-      particles.forEach((particle, index) => {
-        const boost = 1 + smoothLevel * 3.5;
-        particle.angle += particle.speed * 0.004 * boost;
-        const driftX = Math.cos(time * 0.00024 + particle.phase) * 15;
-        const driftY = Math.sin(time * 0.00018 + particle.phase) * 10;
-        const x = particle.x * width + driftX; const y = particle.y * height + driftY;
-        const flicker = 0.18 + (Math.sin(time * 0.002 + particle.phase) + 1) * 0.18 + smoothLevel * 0.22;
-        context.beginPath(); context.arc(x, y, particle.size * (1 + smoothLevel), 0, Math.PI * 2);
-        context.fillStyle = particle.color; context.globalAlpha = flicker; context.fill();
-        if (index % 5 === 0) { context.globalAlpha = flicker * .18; context.strokeStyle = particle.color; context.beginPath(); context.moveTo(x, y); context.lineTo(x - Math.cos(particle.angle) * (10 + smoothLevel * 32), y - Math.sin(particle.angle) * (10 + smoothLevel * 32)); context.stroke(); }
-      });
-
-      // Cyber portal: a clean open centre, technical rings, circuit traces, and data rain.
-      const portalY = cy - 18; const portalRadius = clamp(scale * .22, 120, 220);
-      const aura = context.createRadialGradient(cx, portalY, portalRadius * .15, cx, portalY, portalRadius * 1.85);
-      aura.addColorStop(0, "rgba(8, 33, 87, 0)"); aura.addColorStop(.58, `rgba(25, 184, 255, ${.1 + smoothLevel * .15})`); aura.addColorStop(1, "rgba(4, 23, 72, 0)"); context.fillStyle = aura; context.fillRect(0, portalY - portalRadius * 2, width, portalRadius * 4);
-      for (let ring = 0; ring < 25; ring++) { const radius = portalRadius * .48 + ring * 6.2 + smoothLevel * ring * .56; context.beginPath(); context.arc(cx, portalY, radius, frame * (ring % 2 ? -.13 : .1), Math.PI * 2 + frame * (ring % 2 ? -.13 : .1)); context.setLineDash(ring % 4 === 0 ? [2, 7] : ring % 3 === 0 ? [26, 10] : []); context.strokeStyle = ring % 5 === 0 ? "#6eefff" : "#1687e5"; context.globalAlpha = .13 + (ring % 5 === 0 ? .18 : 0) + smoothLevel * .15; context.lineWidth = ring % 5 === 0 ? 1.1 : .65; context.stroke(); context.setLineDash([]); }
-      // Clearly visible energy waves travel out from the aperture in real time.
-      for (let pulse = 0; pulse < 4; pulse++) {
-        const travel = (time * (.045 + smoothLevel * .085) + pulse * portalRadius * .5) % (portalRadius * 1.6);
-        const radius = portalRadius * .46 + travel; const opacity = (1 - travel / (portalRadius * 1.6)) * (.22 + smoothLevel * .58); const wavePoints = 130;
-        context.beginPath();
-        for (let point = 0; point <= wavePoints; point++) {
-          const angle = -Math.PI * .12 + point / wavePoints * Math.PI * 1.24;
-          const frequency = frequencies[Math.min(255, Math.floor(point / wavePoints * 210) + 8)] / 255;
-          const height = (smoothLevel * 34 + frequency * smoothLevel * 54) * Math.sin(angle * 4 + time * .004 + pulse);
-          const x = cx + Math.cos(angle) * (radius + height); const y = portalY + Math.sin(angle) * (radius + height);
-          point === 0 ? context.moveTo(x, y) : context.lineTo(x, y);
-        }
-        context.setLineDash([9 + smoothLevel * 15, 10]); context.strokeStyle = pulse % 2 ? "#2ccfff" : "#9af7ff"; context.globalAlpha = opacity; context.lineWidth = 1.3 + smoothLevel * 1.5; context.shadowColor = "#37d9ff"; context.shadowBlur = 16 + smoothLevel * 26; context.stroke(); context.setLineDash([]);
-      }
-      // Empty inner aperture and two scanning arcs.
-      context.beginPath(); context.arc(cx, portalY, portalRadius * .42, 0, Math.PI * 2); context.strokeStyle = "rgba(60, 190, 255, .22)"; context.globalAlpha = 1; context.lineWidth = 1.1; context.stroke();
-      [0, Math.PI].forEach((start) => { context.beginPath(); context.arc(cx, portalY, portalRadius * 1.35, start + frame * .32, start + frame * .32 + Math.PI * .68); context.strokeStyle = "#51e9ff"; context.globalAlpha = .62 + smoothLevel * .28; context.lineWidth = 1.3; context.shadowColor = "#38dfff"; context.shadowBlur = 16; context.stroke(); });
-      // Circuit paths plug into the portal from above and below.
-      for (let trace = 0; trace < 13; trace++) { const offset = (trace - 6) * 17; const side = trace % 2 ? 1 : -1; const startY = trace % 2 ? -20 : height + 20; const endY = trace % 2 ? portalY - portalRadius * 1.12 : portalY + portalRadius * 1.12; const bendY = trace % 2 ? endY - 55 : endY + 55; context.beginPath(); context.moveTo(cx + offset, startY); context.lineTo(cx + offset, bendY); context.lineTo(cx + offset + side * (16 + (trace % 3) * 9), bendY + (trace % 2 ? 20 : -20)); context.lineTo(cx + offset + side * (16 + (trace % 3) * 9), endY); context.strokeStyle = "#32beff"; context.globalAlpha = .18 + smoothLevel * .4; context.lineWidth = .8; context.shadowColor = "#23c7ff"; context.shadowBlur = 9; context.stroke(); context.beginPath(); context.arc(cx + offset + side * (16 + (trace % 3) * 9), bendY + (trace % 2 ? 20 : -20), 2 + smoothLevel * 2, 0, Math.PI * 2); context.fillStyle = "#76eeff"; context.globalAlpha = .5 + smoothLevel * .4; context.fill(); }
-      context.globalAlpha = 1; context.shadowBlur = 0;
-      animationId = requestAnimationFrame(draw);
-    };
-    animationId = requestAnimationFrame(draw);
-    return () => { cancelAnimationFrame(animationId); observer.disconnect(); };
-  }, []);
-
-  return <main className="app-shell">
-    <canvas ref={canvasRef} className="visualizer-canvas" aria-hidden="true" />
-    <div className="grid-overlay" />
-    <section className="experience" id="top">
-      <div className="orb-space" />
-    </section>
-
-    <div className="voice-dock">
-      <div className="secondary-row">
-        <div className="transcript-card"><div className="transcript-head"><span><span className={`record-dot ${isRecording ? "recording" : ""}`} /> {recognitionActive ? "Transcribing" : "Transcript"}</span><div className="transcript-actions">{transcript && <button onClick={() => speakText(transcript)} title="Play with AI voice"><Volume2 size={14} /> {isSpeaking ? "Stop" : "AI voice"}</button>}{transcript && <button onClick={downloadTranscript}><Download size={14} /> Text</button>}</div></div><p>{transcript || "Transcript will appear here."}</p></div>
-        <div className="text-voice-card"><div><Volume2 size={15} /><span>AI voice</span><small>Type to speak</small></div><textarea value={voiceText} onChange={(event) => setVoiceText(event.target.value)} placeholder="Write text…" aria-label="Text to speak" /></div>
+  return (
+    <main 
+       onDragOver={handleDragOver} 
+       onDrop={handleDrop}
+       className="app-shell font-sans text-slate-100 flex flex-col h-screen relative bg-[#020617] overflow-hidden"
+    >
+      
+      {/* 3D Canvas Background */}
+      <div className="absolute inset-0 z-0">
+        <Canvas gl={{ preserveDrawingBuffer: true }} camera={{ position: [0, 0, 6], fov: 45 }}>
+          <fog attach="fog" args={['#020617', 5, 20]} />
+          <ambientLight intensity={0.5} />
+          <directionalLight position={[10, 10, 5]} intensity={1.5} color={orbColor} />
+          <directionalLight position={[-10, -10, -5]} intensity={1} color={coreColor} />
+          
+          <Visualizer3D 
+            analyserRef={analyserRef} 
+            isSpeakingRef={isSpeakingRef} 
+            transcript={transcript} 
+            voiceText={isSpeaking ? voiceText : ""} 
+            orbColor={orbColor}
+            coreColor={coreColor}
+            sceneType={sceneType}
+          />
+          
+          <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.5} />
+          <Environment preset="city" />
+        </Canvas>
       </div>
-      <div className="control-row">
-        <button className={`record-button ${isRecording ? "recording" : ""}`} onClick={isRecording ? stopRecording : beginRecording}><span>{isRecording ? <Square size={16} fill="currentColor" /> : <Mic size={19} />}</span>{isRecording ? "Stop recording" : "Record voice"}</button>
-        <label className="upload-button"><Upload size={17} /> Upload audio<input type="file" accept="audio/*" onChange={handleUpload} /></label>
-      </div>
-      {audioUrl && <div className="audio-card"><FileAudio size={17} /><span>{audioName}</span><button onClick={() => audioRef.current?.paused ? audioRef.current.play() : audioRef.current?.pause()}>{isPlaying ? <Pause size={16} /> : <Play size={16} />}</button><a href={audioUrl} download={audioName}><Download size={16} /></a><audio ref={audioRef} src={audioUrl} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} /></div>}
-    </div>
-    {permissionError && <div className="error-toast"><span>{permissionError}</span><button onClick={() => setPermissionError("")} aria-label="Dismiss"><X size={16} /></button></div>}
-  </main>;
+
+      <div className="grid-overlay absolute inset-0 pointer-events-none z-0 opacity-20" />
+
+      {/* Dynamic Header */}
+      <AnimatePresence>
+        {!isZenMode && (
+          <motion.header 
+            initial={{ y: -50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -50, opacity: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className="relative z-10 w-full flex justify-between items-center px-8 sm:px-16 py-10 pointer-events-none"
+          >
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="relative flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/40">
+                  <AudioLines size={24} className="text-white animate-pulse" />
+                  <div className="absolute inset-0 bg-white/20 rounded-xl sm:rounded-2xl animate-ping opacity-20" style={{ animationDuration: '2s' }} />
+                </div>
+                <h1 className="text-4xl sm:text-5xl tracking-wide" style={{ fontFamily: "'Righteous', sans-serif" }}>
+                  <span className="bg-clip-text text-transparent bg-gradient-to-br from-cyan-300 via-cyan-400 to-blue-600 drop-shadow-[0_0_20px_rgba(34,211,238,0.5)]">Echo</span>
+                  <span className="bg-clip-text text-transparent bg-gradient-to-bl from-fuchsia-400 to-purple-600 drop-shadow-[0_0_20px_rgba(217,70,239,0.5)]">Vision</span>
+                </h1>
+              </div>
+              <p className="text-[10px] sm:text-xs text-slate-400/80 font-semibold tracking-[0.2em] uppercase sm:ml-[4.5rem] ml-[3.5rem] mt-1">
+                Live Cinematic Artwork
+              </p>
+            </div>
+            
+            {/* Top Right Controls */}
+            <div className="flex gap-3 pointer-events-auto">
+              <button 
+                onClick={toggleZenMode}
+                className="w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-lg bg-slate-900/60 border border-white/10 hover:bg-slate-800/80 text-white hover:text-cyan-300"
+                title="Zen Mode (Fullscreen)"
+              >
+                <Maximize size={18} />
+              </button>
+              <button 
+                onClick={() => { setShowGallery(!showGallery); setShowSettings(false); }}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${showGallery ? 'bg-cyan-500 text-white' : 'bg-slate-900/60 border border-white/10 hover:bg-slate-800/80 text-cyan-400'}`}
+              >
+                <Grid size={18} />
+              </button>
+              <button 
+                onClick={() => { setShowSettings(!showSettings); setShowGallery(false); }}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${showSettings ? 'bg-purple-500 text-white' : 'bg-slate-900/60 border border-white/10 hover:bg-slate-800/80 text-purple-400'}`}
+              >
+                <Settings size={18} />
+              </button>
+            </div>
+          </motion.header>
+        )}
+      </AnimatePresence>
+      
+      {/* Settings Panel */}
+      <AnimatePresence>
+         {showSettings && !isZenMode && (
+            <motion.div 
+               initial={{ opacity: 0, x: 20 }}
+               animate={{ opacity: 1, x: 0 }}
+               exit={{ opacity: 0, x: 20 }}
+               className="absolute top-24 right-6 sm:right-12 z-50 w-72 bg-slate-950/90 backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-2xl"
+            >
+               <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider text-purple-300">3D Settings</h3>
+               
+               <div className="mb-4">
+                  <label className="text-xs font-semibold text-slate-300 mb-2 block">Visualizer Shape</label>
+                  <select 
+                     value={sceneType} 
+                     onChange={(e) => setSceneType(e.target.value)}
+                     className="w-full bg-black/40 border border-white/10 rounded-xl p-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                  >
+                     <option value="orb">Cyber Orb</option>
+                     <option value="cube">Shattered Cube</option>
+                  </select>
+               </div>
+               
+               <div className="mb-4">
+                  <label className="text-xs font-semibold text-slate-300 mb-2 block">Outer Color</label>
+                  <div className="flex gap-2">
+                     <input type="color" value={orbColor} onChange={(e) => setOrbColor(e.target.value)} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent" />
+                     <span className="text-xs text-slate-400 font-mono mt-1">{orbColor}</span>
+                  </div>
+               </div>
+
+               <div>
+                  <label className="text-xs font-semibold text-slate-300 mb-2 block">Core Color</label>
+                  <div className="flex gap-2">
+                     <input type="color" value={coreColor} onChange={(e) => setCoreColor(e.target.value)} className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent" />
+                     <span className="text-xs text-slate-400 font-mono mt-1">{coreColor}</span>
+                  </div>
+               </div>
+            </motion.div>
+         )}
+      </AnimatePresence>
+
+      {/* Gallery Panel */}
+      <AnimatePresence>
+         {showGallery && !isZenMode && (
+            <motion.div 
+               initial={{ opacity: 0, x: 20 }}
+               animate={{ opacity: 1, x: 0 }}
+               exit={{ opacity: 0, x: 20 }}
+               className="absolute top-24 right-6 sm:right-12 z-50 w-80 max-h-[60vh] overflow-y-auto bg-slate-950/90 backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-2xl scrollbar-thin scrollbar-thumb-white/20"
+            >
+               <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider text-cyan-300">My Gallery</h3>
+               {gallery.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">No media saved yet. Record something!</p>
+               ) : (
+                  <div className="flex flex-col gap-3">
+                     {gallery.map(item => (
+                        <div key={item.id} className="bg-black/40 border border-white/5 rounded-xl p-3 flex justify-between items-center group">
+                           <div className="flex flex-col overflow-hidden max-w-[150px]">
+                              <span className="text-xs font-semibold text-slate-200 truncate">{item.name}</span>
+                              <span className="text-[10px] text-slate-500">{new Date(item.date).toLocaleString()}</span>
+                           </div>
+                           <div className="flex gap-1">
+                              <button onClick={() => loadFromGallery(item)} className="p-1.5 text-cyan-400 hover:bg-cyan-400/20 rounded-md transition-colors" title="View">
+                                 <Play size={14} />
+                              </button>
+                              <a href={URL.createObjectURL(item.blob)} download={item.name} className="p-1.5 text-slate-300 hover:bg-white/20 rounded-md transition-colors" title="Download">
+                                 <Download size={14} />
+                              </a>
+                              <button onClick={() => deleteFromGallery(item.id)} className="p-1.5 text-rose-400 hover:bg-rose-400/20 rounded-md transition-colors opacity-0 group-hover:opacity-100" title="Delete">
+                                 <Trash2 size={14} />
+                              </button>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               )}
+            </motion.div>
+         )}
+      </AnimatePresence>
+
+      
+      {/* Dock Container */}
+      <AnimatePresence>
+        {!isZenMode && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
+            className="absolute inset-0 flex flex-col items-center justify-end pb-10 sm:pb-16 px-6 sm:px-12 pointer-events-none z-20"
+          >
+            <div className="w-full max-w-[500px] grid gap-2 pointer-events-auto">
+              
+              {/* Secondary Row (Transcript & Text-to-Speech) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                
+                {/* Transcript Card */}
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-col bg-slate-950/60 backdrop-blur-2xl border border-white/10 rounded-xl p-2.5 shadow-2xl transition-all duration-300 hover:bg-slate-900/80 hover:border-white/20"
+                >
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="flex items-center gap-1.5 text-[8px] sm:text-[9px] font-mono text-cyan-300 uppercase tracking-widest font-semibold">
+                      <span className={`w-1 h-1 rounded-full ${isRecording ? "bg-rose-500 animate-pulse-ring" : "bg-cyan-500"}`} />
+                      {recognitionActive ? "Transcribing..." : "Transcript"}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {transcript && (
+                        <button onClick={() => speakText(transcript)} className="text-[8px] sm:text-[9px] font-semibold text-slate-300 hover:text-cyan-300 flex items-center gap-1 transition-colors">
+                          <Volume2 size={10} /> {isSpeaking ? "Stop" : "AI Voice"}
+                        </button>
+                      )}
+                      {transcript && (
+                        <button onClick={downloadTranscript} className="text-[8px] sm:text-[9px] font-semibold text-slate-300 hover:text-cyan-300 flex items-center gap-1 transition-colors">
+                          <Download size={10} /> Save
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-300 leading-snug overflow-y-auto max-h-12 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent pr-1.5 flex-1">
+                    {transcript || "Speak clearly into the microphone. AI images will generate in the background..."}
+                  </p>
+                </motion.div>
+      
+                {/* Text-to-Voice Card */}
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="flex flex-col bg-slate-950/60 backdrop-blur-2xl border border-white/10 rounded-xl p-2.5 shadow-2xl transition-all duration-300 hover:bg-slate-900/80 hover:border-white/20"
+                >
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="flex items-center gap-1.5 text-[8px] sm:text-[9px] font-mono text-purple-300 uppercase tracking-widest font-semibold">
+                      <Volume2 size={10} /> AI Synthesis
+                    </span>
+                    <span className="text-[8px] text-slate-400 font-medium">Type to speak</span>
+                  </div>
+                  <div className="flex gap-1.5 h-full items-end">
+                    <textarea 
+                      value={voiceText} 
+                      onChange={(e) => setVoiceText(e.target.value)}
+                      placeholder="Type a message..."
+                      className="flex-1 h-8 bg-black/40 border border-white/10 rounded-lg p-1.5 text-[10px] text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/30 resize-none transition-all"
+                    />
+                    <motion.button 
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => speakText(voiceText)}
+                      disabled={!voiceText.trim()}
+                      className="h-8 w-8 shrink-0 bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed border border-purple-500/30 rounded-lg text-purple-300 flex items-center justify-center transition-all shadow-lg"
+                    >
+                      {isSpeaking ? <Square size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
+                    </motion.button>
+                  </div>
+                </motion.div>
+      
+              </div>
+      
+              {/* Primary Controls Row */}
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.2 }}
+                className="flex flex-wrap items-center justify-center gap-2 mt-0.5"
+              >
+                <motion.button 
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={isRecording ? stopRecording : beginRecording}
+                  className={`group relative overflow-hidden flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl font-bold text-[10px] transition-all duration-300 shadow-xl w-full sm:w-auto ${
+                    isRecording 
+                      ? 'bg-gradient-to-r from-rose-600 to-pink-600 shadow-rose-600/30' 
+                      : 'bg-gradient-to-r from-cyan-500 to-blue-600 shadow-cyan-500/30'
+                  }`}
+                >
+                  <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <span className="relative z-10 flex items-center gap-1.5 text-white uppercase tracking-wider">
+                    {isRecording ? <Square size={12} fill="currentColor" /> : <FileVideo size={12} />}
+                    {isRecording ? "Stop Recording" : "Record Video"}
+                  </span>
+                </motion.button>
+      
+                <label className="cursor-pointer group relative overflow-hidden flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 backdrop-blur-2xl border border-white/10 font-bold text-[10px] text-slate-200 hover:text-white transition-all duration-300 shadow-lg w-full sm:w-auto uppercase tracking-wider">
+                  <Upload size={12} />
+                  <span>Upload Audio</span>
+                  <input type="file" accept="audio/*,video/*" onChange={handleUpload} className="hidden" />
+                </label>
+              </motion.div>
+      
+              {/* Media Player Card */}
+              <AnimatePresence>
+                {mediaUrl && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    className="mt-2 flex flex-col gap-2 bg-slate-950/80 backdrop-blur-3xl border border-white/10 rounded-3xl p-3 shadow-2xl w-full max-w-lg mx-auto"
+                  >
+                    <div className="flex items-center gap-4 px-2">
+                      <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0">
+                        <FileVideo size={18} className="text-cyan-400" />
+                      </div>
+                      <span className="flex-1 truncate text-xs font-semibold text-slate-300 tracking-wide">{mediaName}</span>
+                      <div className="flex items-center gap-2">
+                        <a href={mediaUrl} download={mediaName} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors" title="Download">
+                          <Download size={14} />
+                        </a>
+                        <button onClick={removeUploadedMedia} className="w-9 h-9 flex items-center justify-center rounded-full bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 transition-colors" title="Delete">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Visual Player */}
+                    {isVideoMedia ? (
+                      <video 
+                        src={mediaUrl} 
+                        controls 
+                        className="w-full rounded-2xl bg-black/50 border border-white/5 max-h-[160px] object-cover"
+                      />
+                    ) : (
+                      <audio 
+                        src={mediaUrl} 
+                        controls 
+                        onPlay={onAudioPlayerPlay}
+                        className="w-full h-10 px-2 opacity-80 invert hue-rotate-180" 
+                      />
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+      
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Zen Mode Exit Button */}
+      <AnimatePresence>
+        {isZenMode && (
+           <motion.button 
+             initial={{ opacity: 0, scale: 0.8 }}
+             animate={{ opacity: 1, scale: 1 }}
+             exit={{ opacity: 0, scale: 0.8 }}
+             onClick={toggleZenMode}
+             className="absolute top-6 right-6 z-50 p-4 bg-black/20 hover:bg-black/60 backdrop-blur-md rounded-full text-white/50 hover:text-white transition-all shadow-xl"
+             title="Exit Zen Mode"
+           >
+              <Minimize size={24} />
+           </motion.button>
+        )}
+      </AnimatePresence>
+  
+      {/* Toast for Errors */}
+      <AnimatePresence>
+        {permissionError && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="fixed top-8 left-1/2 flex items-center gap-4 bg-rose-500/90 backdrop-blur-xl text-white px-6 py-3 rounded-full shadow-2xl shadow-rose-500/20 z-[60]"
+          >
+            <span className="text-sm font-medium">{permissionError}</span>
+            <button onClick={() => setPermissionError("")} className="hover:bg-white/20 p-1 rounded-full transition-colors">
+              <X size={16} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </main>
+  );
 }
 
 export default App;

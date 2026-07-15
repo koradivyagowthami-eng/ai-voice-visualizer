@@ -1,0 +1,12 @@
+{% extends "portal/base.html" %}
+
+{% block content %}
+<section class="form-page">
+    <h1>Post Lost or Found Item</h1>
+    <form method="post" enctype="multipart/form-data" class="app-form">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Submit Item</button>
+    </form>
+</section>
+{% endblock %}

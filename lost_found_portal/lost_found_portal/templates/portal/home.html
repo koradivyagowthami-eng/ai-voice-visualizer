@@ -1,0 +1,45 @@
+{% extends "portal/base.html" %}
+
+{% block content %}
+<section class="hero">
+    <div>
+        <p class="eyebrow">College Campus</p>
+        <h1>Find lost items and report found belongings.</h1>
+        <p class="hero-text">Search by item name or location. Students can also send a claim request with proof.</p>
+    </div>
+    <a class="primary-button" href="{% url 'post_item' %}">Post Lost or Found Item</a>
+</section>
+
+<section class="search-panel">
+    <form method="get" class="search-form">
+        <input type="text" name="q" value="{{ query }}" placeholder="Search wallet, ID card, library...">
+        <select name="type">
+            <option value="">All items</option>
+            <option value="lost" {% if selected_type == "lost" %}selected{% endif %}>Lost</option>
+            <option value="found" {% if selected_type == "found" %}selected{% endif %}>Found</option>
+        </select>
+        <button type="submit">Search</button>
+    </form>
+</section>
+
+<section class="item-grid">
+    {% for item in items %}
+        <article class="item-card">
+            {% if item.image %}
+                <img src="{{ item.image.url }}" alt="{{ item.name }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';">
+                <div class="image-placeholder hidden-placeholder">No Image</div>
+            {% else %}
+                <div class="image-placeholder">No Image</div>
+            {% endif %}
+            <div class="item-card-body">
+                <span class="tag {{ item.item_type }}">{{ item.get_item_type_display }}</span>
+                <h2>{{ item.name }}</h2>
+                <p>{{ item.location }}</p>
+                <a href="{% url 'item_detail' item.id %}">View Details</a>
+            </div>
+        </article>
+    {% empty %}
+        <p class="empty">No matching items found.</p>
+    {% endfor %}
+</section>
+{% endblock %}

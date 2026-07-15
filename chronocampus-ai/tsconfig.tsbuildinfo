@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/builderpanel.tsx","./src/components/exportbar.tsx","./src/components/insightspanel.tsx","./src/components/statcard.tsx","./src/components/timetablegrid.tsx","./src/lib/exporters.ts","./src/lib/generator.ts","./src/lib/sampledata.ts","./src/lib/time.ts","./src/types/timetable.ts"],"version":"6.0.3"}

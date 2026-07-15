@@ -1,0 +1,58 @@
+/* Simple, responsive styling for the Current Converter page. */
+:root {
+  color: #172033;
+  background: #edf3ff;
+  font-family: Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.converter-card {
+  width: min(100%, 560px);
+  padding: 32px;
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(23, 32, 51, 0.12);
+}
+
+.page-header { border-bottom: 1px solid #e4eaf5; margin-bottom: 24px; }
+.eyebrow { margin: 0; color: #2962d8; font-size: .75rem; font-weight: 700; letter-spacing: .12em; }
+h1 { margin: 8px 0; font-size: clamp(1.8rem, 5vw, 2.4rem); }
+.intro { margin: 0 0 24px; color: #5d687b; }
+
+label, .result span { display: block; margin-bottom: 8px; font-weight: 700; }
+.field + .field { margin-top: 18px; }
+input, select, button, .reset-button {
+  width: 100%; min-height: 46px; border-radius: 8px; font: inherit;
+}
+input, select { padding: 10px 12px; border: 1px solid #bdc8dc; background: white; }
+input:focus, select:focus { outline: 3px solid #b9d1ff; border-color: #2962d8; }
+
+.unit-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 20px; }
+.unit-grid .field + .field { margin-top: 0; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 26px; }
+button { border: 0; background: #2962d8; color: white; font-weight: 700; cursor: pointer; }
+button:hover { background: #1d4fb9; }
+.reset-button { display: grid; place-items: center; border: 1px solid #bdc8dc; color: #34415a; text-decoration: none; }
+
+.result { margin-top: 26px; padding: 20px; border-radius: 10px; background: #f0f5ff; border-left: 4px solid #2962d8; }
+.result-label { color: #5d687b; font-size: .9rem; }
+.result strong { font-size: 1.45rem; }
+.result strong small { font-size: .85em; color: #4a5770; }
+.result p { margin: 8px 0 0; color: #5d687b; font-size: .92rem; }
+.error { color: #b42318; }
+.help-text { margin: 20px 0 0; color: #5d687b; font-size: .85rem; text-align: center; }
+
+@media (max-width: 480px) {
+  body { padding: 14px; }
+  .converter-card { padding: 24px 18px; }
+  .unit-grid, .actions { grid-template-columns: 1fr; }
+}
