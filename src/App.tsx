@@ -473,15 +473,15 @@ function App() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -50, opacity: 0 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
-            className="relative z-10 w-full flex justify-between items-center px-8 sm:px-16 py-10 pointer-events-none"
+            className="relative z-10 w-full flex justify-between items-center px-4 sm:px-16 py-6 sm:py-10 pointer-events-none"
           >
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3 sm:gap-4">
-                <div className="relative flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/40">
-                  <AudioLines size={24} className="text-white animate-pulse" />
-                  <div className="absolute inset-0 bg-white/20 rounded-xl sm:rounded-2xl animate-ping opacity-20" style={{ animationDuration: '2s' }} />
+                <div className="relative flex items-center justify-center w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/40">
+                  <AudioLines size={18} className="sm:w-6 sm:h-6 text-white animate-pulse" />
+                  <div className="absolute inset-0 bg-white/20 rounded-lg sm:rounded-2xl animate-ping opacity-20" style={{ animationDuration: '2s' }} />
                 </div>
-                <h1 className="text-4xl sm:text-5xl tracking-wide" style={{ fontFamily: "'Righteous', sans-serif" }}>
+                <h1 className="text-3xl sm:text-5xl tracking-wide" style={{ fontFamily: "'Righteous', sans-serif" }}>
                   <span className="bg-clip-text text-transparent bg-gradient-to-br from-cyan-300 via-cyan-400 to-blue-600 drop-shadow-[0_0_20px_rgba(34,211,238,0.5)]">Echo</span>
                   <span className="bg-clip-text text-transparent bg-gradient-to-bl from-fuchsia-400 to-purple-600 drop-shadow-[0_0_20px_rgba(217,70,239,0.5)]">Vision</span>
                 </h1>
@@ -492,13 +492,27 @@ function App() {
             </div>
             
             {/* Top Right Controls */}
-            <div className="flex gap-3 pointer-events-auto">
+            <div className="flex gap-1.5 sm:gap-3 pointer-events-auto shrink-0">
+              <button 
+                onClick={toggleZenMode}
+                className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors shadow-lg bg-slate-900/60 border border-white/10 hover:bg-slate-800/80 text-white hover:text-cyan-300"
+                title="Zen Mode (Fullscreen)"
+              >
+                <Maximize size={16} />
+              </button>
+              <button 
+                onClick={() => { setShowGallery(!showGallery); setShowSettings(false); }}
+                className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors ${showGallery ? 'bg-cyan-500 text-white' : 'bg-slate-900/60 border border-white/10 hover:bg-slate-800/80 text-cyan-400'}`}
+                title="Gallery"
+              >
+                <Grid size={16} />
+              </button>
               <button 
                 onClick={() => { setShowSettings(!showSettings); setShowGallery(false); }}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${showSettings ? 'bg-purple-500 text-white' : 'bg-slate-900/60 border border-white/10 hover:bg-slate-800/80 text-purple-400'}`}
+                className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors ${showSettings ? 'bg-purple-500 text-white' : 'bg-slate-900/60 border border-white/10 hover:bg-slate-800/80 text-purple-400'}`}
                 title="Settings"
               >
-                <Settings size={18} />
+                <Settings size={16} />
               </button>
             </div>
           </motion.header>
@@ -594,7 +608,7 @@ function App() {
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
-            className="absolute inset-0 flex flex-col items-center justify-end pb-10 sm:pb-16 px-6 sm:px-12 pointer-events-none z-20"
+            className="absolute inset-0 flex flex-col items-center justify-end pb-6 sm:pb-16 px-4 sm:px-12 pointer-events-none z-20"
           >
             <div className="w-full max-w-[500px] grid gap-2 pointer-events-auto">
               
